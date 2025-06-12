@@ -1,1 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
+# Environment variables and config
+.env
+src/config.py
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+data/profiles/
