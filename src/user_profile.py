@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 import os
 
@@ -18,6 +18,35 @@ class UserProfile:
     music_preferences: List[MusicPreference]
     top_artists: List[str]
     top_genres: List[str]
+    top_songs: List[dict] = None
+    top_albums: List[dict] = None
+    favorite_artists: List[str] = None
+    favorite_songs: List[str] = None
+    favorite_genres: List[str] = None
+    favorite_albums: List[str] = None
+    # Personal information fields
+    first_name: str = ""
+    last_name: str = ""
+    age: Optional[int] = None
+    gender: str = ""
+    location: str = ""
+    bio: str = ""
+    profile_picture_path: str = ""
+    
+    def __post_init__(self):
+        # Initialize empty lists for favorites if None
+        if self.favorite_artists is None:
+            self.favorite_artists = []
+        if self.favorite_songs is None:
+            self.favorite_songs = []
+        if self.favorite_genres is None:
+            self.favorite_genres = []
+        if self.favorite_albums is None:
+            self.favorite_albums = []
+        if self.top_songs is None:
+            self.top_songs = []
+        if self.top_albums is None:
+            self.top_albums = []
     
     def to_dict(self) -> Dict:
         return {
@@ -33,7 +62,20 @@ class UserProfile:
                 } for p in self.music_preferences
             ],
             'top_artists': self.top_artists,
-            'top_genres': self.top_genres
+            'top_genres': self.top_genres,
+            'top_songs': self.top_songs,
+            'top_albums': self.top_albums,
+            'favorite_artists': self.favorite_artists,
+            'favorite_songs': self.favorite_songs,
+            'favorite_genres': self.favorite_genres,
+            'favorite_albums': self.favorite_albums,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'age': self.age,
+            'gender': self.gender,
+            'location': self.location,
+            'bio': self.bio,
+            'profile_picture_path': self.profile_picture_path
         }
     
     @classmethod
@@ -51,13 +93,28 @@ class UserProfile:
                 ) for p in data['music_preferences']
             ],
             top_artists=data['top_artists'],
-            top_genres=data['top_genres']
+            top_genres=data['top_genres'],
+            top_songs=data.get('top_songs', []),
+            top_albums=data.get('top_albums', []),
+            favorite_artists=data.get('favorite_artists', []),
+            favorite_songs=data.get('favorite_songs', []),
+            favorite_genres=data.get('favorite_genres', []),
+            favorite_albums=data.get('favorite_albums', []),
+            first_name=data.get('first_name', ''),
+            last_name=data.get('last_name', ''),
+            age=data.get('age'),
+            gender=data.get('gender', ''),
+            location=data.get('location', ''),
+            bio=data.get('bio', ''),
+            profile_picture_path=data.get('profile_picture_path', '')
         )
 
 class UserProfileManager:
-    def __init__(self, storage_dir: str = 'data/profiles'):
+    def __init__(self, storage_dir: str = 'data/profiles', pictures_dir: str = 'data/profile_pictures'):
         self.storage_dir = storage_dir
+        self.pictures_dir = pictures_dir
         os.makedirs(storage_dir, exist_ok=True)
+        os.makedirs(pictures_dir, exist_ok=True)
     
     def save_profile(self, profile: UserProfile):
         file_path = os.path.join(self.storage_dir, f"{profile.user_id}.json")
@@ -70,6 +127,41 @@ class UserProfileManager:
             return None
         with open(file_path, 'r') as f:
             return UserProfile.from_dict(json.load(f))
+    
+    def save_profile_picture(self, user_id: str, image_path: str) -> str:
+        """Save a profile picture and return the saved path"""
+        import shutil
+        from PIL import Image
+        
+        # Get file extension
+        file_ext = os.path.splitext(image_path)[1].lower()
+        if file_ext not in ['.jpg', '.jpeg', '.png', '.gif']:
+            raise ValueError("Unsupported image format. Please use JPG, PNG, or GIF.")
+        
+        # Create new filename
+        new_filename = f"{user_id}{file_ext}"
+        new_path = os.path.join(self.pictures_dir, new_filename)
+        
+        # Resize and save image
+        with Image.open(image_path) as img:
+            # Convert to RGB if necessary
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Resize to 300x300 while maintaining aspect ratio
+            img.thumbnail((300, 300), Image.LANCZOS)
+            
+            # Save the resized image
+            img.save(new_path, quality=85, optimize=True)
+        
+        return new_path
+    
+    def get_profile_picture_path(self, user_id: str) -> Optional[str]:
+        """Get the profile picture path for a user"""
+        profile = self.load_profile(user_id)
+        if profile and profile.profile_picture_path and os.path.exists(profile.profile_picture_path):
+            return profile.profile_picture_path
+        return None
     
     def calculate_compatibility(self, profile1: UserProfile, profile2: UserProfile) -> float:
         """
