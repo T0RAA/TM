@@ -288,7 +288,7 @@ class SpotifyApp:
                 response = requests.get(track_info['album']['images'][0]['url'])
                 img_data = response.content
                 img = Image.open(io.BytesIO(img_data))
-                img = img.resize((300, 300), Image.ANTIALIAS)
+                img = img.resize((300, 300), Image.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 self.canvas.create_image(0, 0, anchor=tk.NW, image=photo)
                 self.canvas.image = photo  # Keep a reference
