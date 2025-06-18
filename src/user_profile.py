@@ -18,13 +18,13 @@ class UserProfile:
     music_preferences: List[MusicPreference]
     top_artists: List[str]
     top_genres: List[str]
-    top_songs: List[dict] = None
-    top_albums: List[dict] = None
+    top_songs: List[dict]
+    top_albums: List[dict]
     favorite_artists: List[str] = None
     favorite_songs: List[str] = None
     favorite_genres: List[str] = None
     favorite_albums: List[str] = None
-    # Personal information fields
+    # New personal information fields
     first_name: str = ""
     last_name: str = ""
     age: Optional[int] = None
@@ -43,10 +43,6 @@ class UserProfile:
             self.favorite_genres = []
         if self.favorite_albums is None:
             self.favorite_albums = []
-        if self.top_songs is None:
-            self.top_songs = []
-        if self.top_albums is None:
-            self.top_albums = []
     
     def to_dict(self) -> Dict:
         return {

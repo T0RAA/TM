@@ -2,173 +2,165 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import time
-from typing import Callable, List, Dict, Any
 
 class SpotifySearchDropdown:
-    def __init__(self, parent, search_function: Callable[[str], List[Dict[str, Any]]], 
-                 placeholder: str = "Search...", width: int = 30, max_results: int = 10):
-        """
-        Initialize the Spotify search dropdown
-        
-        Args:
-            parent: Parent widget
-            search_function: Function that takes a query string and returns search results
-            placeholder: Placeholder text for the entry
-            width: Width of the entry widget
-            max_results: Maximum number of results to show
-        """
+    def __init__(self, parent, search_function, placeholder="Search...", width=40):
         self.parent = parent
         self.search_function = search_function
-        self.max_results = max_results
+        self.placeholder = placeholder
+        self.width = width
+        self.search_results = []
         self.search_thread = None
         self.last_search_time = 0
-        self.debounce_delay = 0.5  # seconds
+        self.search_delay = 0.5  # Delay in seconds before searching
         
-        # Create main frame
-        self.frame = ttk.Frame(parent)
+        self.setup_ui()
         
-        # Create entry widget
-        self.entry = ttk.Entry(self.frame, width=width)
+    def setup_ui(self):
+        # Main frame
+        self.frame = ttk.Frame(self.parent)
+        
+        # Entry field
+        self.entry_var = tk.StringVar()
+        self.entry = ttk.Entry(self.frame, textvariable=self.entry_var, width=self.width)
         self.entry.pack(side=tk.LEFT, fill='x', expand=True)
         
-        # Set placeholder
-        self.entry.insert(0, placeholder)
+        # Bind events
+        self.entry.bind('<KeyRelease>', self.on_key_release)
         self.entry.bind('<FocusIn>', self.on_focus_in)
         self.entry.bind('<FocusOut>', self.on_focus_out)
-        self.entry.bind('<KeyRelease>', self.on_key_release)
         
-        # Create dropdown listbox
-        self.dropdown = tk.Listbox(self.frame, height=0)
-        self.dropdown.pack(side=tk.LEFT, fill='x', expand=True)
-        self.dropdown.bind('<<ListboxSelect>>', self.on_select)
+        # Dropdown listbox
+        self.dropdown_frame = ttk.Frame(self.parent)
+        self.listbox = tk.Listbox(self.dropdown_frame, height=6, width=self.width)
+        self.scrollbar = ttk.Scrollbar(self.dropdown_frame, orient="vertical", command=self.listbox.yview)
+        self.listbox.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.listbox.pack(side=tk.LEFT, fill='both', expand=True)
+        self.scrollbar.pack(side=tk.RIGHT, fill='y')
+        
+        # Bind listbox events
+        self.listbox.bind('<Double-Button-1>', self.on_select)
+        self.listbox.bind('<Return>', self.on_select)
         
         # Initially hide dropdown
-        self.dropdown.pack_forget()
+        self.dropdown_frame.pack_forget()
         
-        # Track if dropdown is visible
-        self.is_dropdown_visible = False
-        
-    def on_focus_in(self, event):
-        """Handle focus in event"""
-        if self.entry.get() == "Search..." or self.entry.get() == "Search artists..." or \
-           self.entry.get() == "Search songs..." or self.entry.get() == "Search genres..." or \
-           self.entry.get() == "Search albums...":
-            self.entry.delete(0, tk.END)
-            self.entry.config(foreground='black')
-    
-    def on_focus_out(self, event):
-        """Handle focus out event"""
-        if not self.entry.get():
-            self.entry.insert(0, "Search...")
-            self.entry.config(foreground='gray')
-        self.hide_dropdown()
-    
     def on_key_release(self, event):
-        """Handle key release event - trigger search"""
-        query = self.entry.get().strip()
+        """Handle key release events for search"""
+        query = self.entry_var.get().strip()
         
-        # Don't search if query is too short or is placeholder
-        if len(query) < 2 or query in ["Search...", "Search artists...", "Search songs...", "Search genres...", "Search albums..."]:
-            self.hide_dropdown()
-            return
-        
-        # Debounce search
-        current_time = time.time()
-        if current_time - self.last_search_time < self.debounce_delay:
-            return
-        
-        self.last_search_time = current_time
-        
-        # Cancel previous search thread if running
+        # Cancel previous search if still running
         if self.search_thread and self.search_thread.is_alive():
+            self.last_search_time = time.time()
             return
-        
-        # Start new search thread
-        self.search_thread = threading.Thread(target=self.perform_search, args=(query,))
+            
+        # Schedule new search
+        self.last_search_time = time.time()
+        self.search_thread = threading.Thread(target=self.delayed_search, args=(query,))
         self.search_thread.daemon = True
         self.search_thread.start()
-    
-    def perform_search(self, query: str):
-        """Perform search in background thread"""
-        try:
-            results = self.search_function(query)
+        
+    def delayed_search(self, query):
+        """Perform search with delay to avoid too many API calls"""
+        time.sleep(self.search_delay)
+        
+        # Check if this is still the most recent search
+        if time.time() - self.last_search_time < self.search_delay:
+            return
             
-            # Update UI in main thread
-            self.parent.after(0, lambda: self.update_dropdown(results))
+        if len(query) < 2:  # Don't search for very short queries
+            self.parent.after(0, self.hide_dropdown)
+            return
+            
+        try:
+            # Perform the search
+            print(f"Searching for: '{query}'")
+            results = self.search_function(query)
+            print(f"Search results: {len(results) if results else 0} items")
+            self.parent.after(0, lambda: self.update_results(results))
         except Exception as e:
             print(f"Search error: {e}")
-            # Update UI in main thread to show error
-            self.parent.after(0, lambda: self.update_dropdown([]))
-    
-    def update_dropdown(self, results: List[Dict[str, Any]]):
-        """Update dropdown with search results"""
-        self.dropdown.delete(0, tk.END)
+            self.parent.after(0, lambda: self.update_results([]))
+            self.parent.after(0, self.hide_dropdown)
+            
+    def update_results(self, results):
+        """Update the dropdown with search results"""
+        self.search_results = results
+        self.listbox.delete(0, tk.END)
         
         if not results:
-            self.hide_dropdown()
-            return
-        
-        # Add results to dropdown
-        for i, result in enumerate(results[:self.max_results]):
-            display_text = self.format_result(result)
-            self.dropdown.insert(tk.END, display_text)
-        
-        # Show dropdown
-        self.show_dropdown()
-    
-    def format_result(self, result: Dict[str, Any]) -> str:
-        """Format a search result for display"""
-        if 'name' in result and 'artist' in result:
-            # Song result
-            return f"{result['name']} - {result['artist']}"
-        elif 'name' in result and 'release_date' in result:
-            # Album result
-            return f"{result['name']} - {result.get('artist', 'Unknown')} ({result['release_date']})"
-        elif 'name' in result and 'popularity' in result:
-            # Artist result
-            return f"{result['name']} (Popularity: {result['popularity']})"
-        elif isinstance(result, str):
-            # Genre result
-            return result
+            self.listbox.insert(tk.END, "No results found")
         else:
-            # Fallback
-            return str(result.get('name', 'Unknown'))
-    
-    def show_dropdown(self):
-        """Show the dropdown"""
-        if not self.is_dropdown_visible:
-            self.dropdown.pack(side=tk.LEFT, fill='x', expand=True)
-            self.is_dropdown_visible = True
-    
-    def hide_dropdown(self):
-        """Hide the dropdown"""
-        if self.is_dropdown_visible:
-            self.dropdown.pack_forget()
-            self.is_dropdown_visible = False
-    
+            for result in results:
+                if isinstance(result, dict):
+                    # Handle different result types
+                    if 'name' in result and 'artist' in result:
+                        # Track or album
+                        display_text = f"{result['name']} - {result['artist']}"
+                    elif 'name' in result:
+                        # Artist
+                        display_text = result['name']
+                    else:
+                        display_text = str(result)
+                else:
+                    # String (genre)
+                    display_text = str(result)
+                    
+                self.listbox.insert(tk.END, display_text)
+        
+        if results:
+            self.show_dropdown()
+        else:
+            self.hide_dropdown()
+            
     def on_select(self, event):
         """Handle selection from dropdown"""
-        selection = self.dropdown.curselection()
+        selection = self.listbox.curselection()
         if selection:
-            selected_text = self.dropdown.get(selection[0])
-            self.entry.delete(0, tk.END)
-            self.entry.insert(0, selected_text)
-            self.hide_dropdown()
-    
-    def get_value(self) -> str:
+            index = selection[0]
+            if index < len(self.search_results):
+                selected_item = self.search_results[index]
+                self.entry_var.set(self.format_selection(selected_item))
+                self.hide_dropdown()
+                
+    def format_selection(self, item):
+        """Format the selected item for display in entry"""
+        if isinstance(item, dict):
+            if 'name' in item and 'artist' in item:
+                return f"{item['name']} - {item['artist']}"
+            elif 'name' in item:
+                return item['name']
+        return str(item)
+        
+    def on_focus_in(self, event):
+        """Show dropdown when entry gets focus"""
+        if self.search_results:
+            self.show_dropdown()
+            
+    def on_focus_out(self, event):
+        """Hide dropdown when entry loses focus"""
+        # Use after to allow for selection clicks
+        self.parent.after(150, self.hide_dropdown)
+        
+    def show_dropdown(self):
+        """Show the dropdown listbox"""
+        self.dropdown_frame.pack(fill='x', expand=True)
+        
+    def hide_dropdown(self):
+        """Hide the dropdown listbox"""
+        self.dropdown_frame.pack_forget()
+        
+    def get_value(self):
         """Get the current value from the entry"""
-        value = self.entry.get().strip()
-        # Don't return placeholder text
-        if value in ["Search...", "Search artists...", "Search songs...", "Search genres...", "Search albums..."]:
-            return ""
-        return value
-    
+        return self.entry_var.get().strip()
+        
+    def set_value(self, value):
+        """Set the value in the entry"""
+        self.entry_var.set(value)
+        
     def clear(self):
         """Clear the entry and hide dropdown"""
-        self.entry.delete(0, tk.END)
+        self.entry_var.set("")
         self.hide_dropdown()
-    
-    def set_value(self, value: str):
-        """Set the entry value"""
-        self.entry.delete(0, tk.END)
-        self.entry.insert(0, value) 
+        self.search_results = [] 
