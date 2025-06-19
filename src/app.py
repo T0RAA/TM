@@ -25,6 +25,121 @@ from config import (
     DISCORD_CLIENT_ID
 )
 import tkinter.messagebox as messagebox
+from tkinter import filedialog
+
+# --- THEME SETUP ---
+def create_vertical_gradient(width, height, color1, color2):
+    from PIL import Image, ImageTk
+    base = Image.new('RGB', (width, height), color1)
+    top = Image.new('RGB', (width, height), color2)
+    mask = Image.new('L', (width, height))
+    for y in range(height):
+        mask.putpixel((0, y), int(255 * (y / height)))
+    mask = mask.resize((width, height))
+    base.paste(top, (0, 0), mask)
+    return ImageTk.PhotoImage(base)
+
+def setup_theme(root):
+    style = ttk.Style(root)
+    root.configure(bg='#FFF0F6')
+    style.theme_use('clam')
+    # General
+    style.configure('.', font=('Poppins', 11), background='#FFF0F6', foreground='#222')
+    style.configure('TLabel', background='#FFF0F6', foreground='#222')
+    style.configure('TFrame', background='#FFF0F6')
+    style.configure('TNotebook', background='#FFF0F6', borderwidth=0)
+    style.configure('TNotebook.Tab', background='#FFB6C1', foreground='#222', padding=10, font=('Poppins', 12, 'bold'))
+    style.map('TNotebook.Tab', background=[('selected', '#39D353')], foreground=[('selected', '#FFF')])
+    # Buttons
+    style.configure('TButton',
+        background='#39D353',
+        foreground='#FFF',
+        borderwidth=0,
+        focusthickness=3,
+        focuscolor='#FFB6C1',
+        padding=8,
+        font=('Poppins', 11, 'bold')
+    )
+    style.map('TButton',
+        background=[('active', '#00E676')],
+        foreground=[('active', '#FFF')]
+    )
+    # Entry fields
+    style.configure('TEntry', fieldbackground='#FFF', bordercolor='#FFB6C1', relief='flat', padding=6)
+    # LabelFrames
+    style.configure('TLabelframe', background='#FFF0F6', bordercolor='#FFB6C1', borderwidth=2, relief='ridge')
+    style.configure('TLabelframe.Label', background='#FFF0F6', foreground='#FF69B4', font=('Poppins', 12, 'bold'))
+
+# --- BUBBLY BUTTON ---
+class BubblyButton(tk.Canvas):
+    def __init__(self, parent, text, command=None, width=200, height=54, color='#39D353', **kwargs):
+        super().__init__(parent, width=width, height=height, bg='#FFE4EC', highlightthickness=0, bd=0, **kwargs)
+        # Draw shadow
+        self.create_oval(10, height-12, width-10, height+12, fill='#b2dfb2', outline='')
+        # Draw pill button
+        self.create_oval(0, 0, height, height, fill=color, outline='')
+        self.create_oval(width-height, 0, width, height, fill=color, outline='')
+        self.create_rectangle(height//2, 0, width-height//2, height, fill=color, outline='')
+        # Draw text
+        self.text_id = self.create_text(width//2, height//2, text=text, font=('Poppins', 16, 'bold'), fill='#fff')
+        self.command = command
+        self.bind('<Button-1>', lambda e: self.command() if self.command else None)
+        self.bind('<Enter>', lambda e: self.itemconfig(self.text_id, fill='#222'))
+        self.bind('<Leave>', lambda e: self.itemconfig(self.text_id, fill='#fff'))
+
+# --- BUBBLY PROFILE CARD ---
+def create_profile_card(parent, profile, image_size=100):
+    card_w, card_h = 340, 220
+    card = tk.Canvas(parent, width=card_w, height=card_h, bg='#FFE4EC', highlightthickness=0)
+    # Draw shadow
+    card.create_oval(20, card_h-30, card_w-20, card_h+20, fill='#e0bfcf', outline='')
+    # Draw rounded rectangle (simulate with ovals + rectangles)
+    card.create_oval(0, 0, 60, 60, fill='#fff', outline='')
+    card.create_oval(card_w-60, 0, card_w, 60, fill='#fff', outline='')
+    card.create_oval(0, card_h-60, 60, card_h, fill='#fff', outline='')
+    card.create_oval(card_w-60, card_h-60, card_w, card_h, fill='#fff', outline='')
+    card.create_rectangle(30, 0, card_w-30, card_h, fill='#fff', outline='')
+    card.create_rectangle(0, 30, card_w, card_h-30, fill='#fff', outline='')
+    # Profile image (circular)
+    if profile and profile.profile_picture_path and os.path.exists(profile.profile_picture_path):
+        try:
+            from PIL import Image, ImageTk, ImageDraw
+            img = Image.open(profile.profile_picture_path).convert('RGBA')
+            img = img.resize((image_size, image_size), Image.LANCZOS)
+            mask = Image.new('L', (image_size, image_size), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, image_size, image_size), fill=255)
+            img.putalpha(mask)
+            photo = ImageTk.PhotoImage(img)
+            card.create_image(card_w//2, 60, image=photo)
+            card.photo = photo  # Keep reference
+        except Exception as e:
+            card.create_oval(card_w//2-image_size//2, 20, card_w//2+image_size//2, 20+image_size, fill='#FFB6C1', outline='')
+            card.create_text(card_w//2, 60, text='No Photo', fill='#fff', font=('Poppins', 10, 'bold'))
+    else:
+        card.create_oval(card_w//2-image_size//2, 20, card_w//2+image_size//2, 20+image_size, fill='#FFB6C1', outline='')
+        card.create_text(card_w//2, 60, text='No Photo', fill='#fff', font=('Poppins', 10, 'bold'))
+    # Name, age, artists
+    name = f"{profile.first_name} {profile.last_name}" if profile and profile.first_name else "Your Name"
+    age = f", {profile.age}" if profile and profile.age else ""
+    card.create_text(card_w//2, 130, text=f"{name}{age}", font=('Poppins', 18, 'bold'), fill='#222')
+    # Top Artists
+    artists = ', '.join(profile.top_artists[:3]) if profile and profile.top_artists else "No artists yet"
+    card.create_text(card_w//2, 165, text=f"Top Artists: {artists}", font=('Poppins', 12), fill='#39D353')
+    return card
+
+# --- HEADER WITH GRADIENT AND SHADOW ---
+def create_header(parent, text):
+    frame = tk.Frame(parent, bg='#FFF0F6')
+    canvas = tk.Canvas(frame, width=340, height=50, bg='#FFF0F6', highlightthickness=0)
+    grad_img = create_vertical_gradient(340, 40, '#FFB6C1', '#39D353')
+    canvas.create_oval(10, 35, 330, 55, fill='#bbb', outline='')  # shadow
+    canvas.create_image(0, 0, anchor='nw', image=grad_img)
+    canvas.create_text(170, 25, text=text, font=('Poppins', 16, 'bold'), fill='#fff')
+    canvas.pack()
+    frame.pack(pady=10)
+    frame.gradient_img = grad_img  # Keep reference
+    return frame
 
 # Initialize Discord Rich Presence
 discord_rpc = Presence(DISCORD_CLIENT_ID)
@@ -342,10 +457,39 @@ def update_discord_presence(track_info):
         large_text=track_info['name']
     )
 
+def get_recently_played(token, limit=10):
+    """Fetch recently played tracks from Spotify API."""
+    headers = {'Authorization': f'Bearer {token}'}
+    response = requests.get(f'https://api.spotify.com/v1/me/player/recently-played?limit={limit}', headers=headers)
+    if response.status_code != 200:
+        print(f"Error getting recently played: {response.status_code}")
+        return []
+    data = response.json()
+    tracks = []
+    for item in data.get('items', []):
+        track = item['track']
+        tracks.append({
+            'name': track['name'],
+            'artist': ', '.join([a['name'] for a in track['artists']]),
+            'album': track['album']['name'],
+            'album_art': track['album']['images'][0]['url'] if track['album']['images'] else None,
+            'played_at': item['played_at']
+        })
+    return tracks
+
 class SpotifyApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Music Dating App")
+        setup_theme(self.root)
+        # Gradient background
+        self.bg_canvas = tk.Canvas(self.root, width=800, height=600, highlightthickness=0)
+        self.bg_canvas.pack(fill='both', expand=True)
+        self.gradient_img = create_vertical_gradient(800, 600, '#FFE4EC', '#39D353')
+        self.bg_canvas.create_image(0, 0, anchor='nw', image=self.gradient_img)
+        # Place main frame on top
+        self.main_frame = tk.Frame(self.root, bg='#FFF0F6')
+        self.main_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.root.title("🎵 TasteMate - Music Dating App 💚")
         self.root.geometry("800x600")
         
         # Initialize variables
@@ -355,6 +499,7 @@ class SpotifyApp:
         self.is_running = True
         self.last_track_id = None
         self.session_token = None
+        self.preloaded_top_items = None  # Cache for preloaded data
         
         # Initialize auth manager
         self.auth_manager = AuthManager()
@@ -399,9 +544,26 @@ class SpotifyApp:
         # Clear any existing UI elements completely
         for widget in self.root.winfo_children():
             widget.destroy()
+        # Destroy main_frame if it exists
+        if hasattr(self, 'main_frame') and self.main_frame is not None:
+            try:
+                self.main_frame.destroy()
+            except:
+                pass
+        # Recreate main_frame
+        self.main_frame = tk.Frame(self.root, bg='#FFF0F6')
+        self.main_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        # Recreate gradient background
+        self.bg_canvas = tk.Canvas(self.root, width=800, height=600, highlightthickness=0)
+        self.bg_canvas.pack(fill='both', expand=True)
+        self.gradient_img = create_vertical_gradient(800, 600, '#FFE4EC', '#39D353')
+        self.bg_canvas.create_image(0, 0, anchor='nw', image=self.gradient_img)
+        self.main_frame.lift()
+        self.root.title("🎵 TasteMate - Music Dating App 💚")
+        self.root.geometry("800x600")
         
         # Create main notebook for tabs
-        self.notebook = ttk.Notebook(self.root)
+        self.notebook = ttk.Notebook(self.main_frame)
         self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
         
         # Create tabs
@@ -424,7 +586,7 @@ class SpotifyApp:
         profile = self.profile_manager.load_profile(self.current_user_id)
         if profile:
             self.update_profile_display(profile)
-            
+        
         # Get Spotify token and user info
         self.setup_spotify()
 
@@ -459,7 +621,10 @@ class SpotifyApp:
             token, refresh_token = get_spotify_token()
             self.current_token = token
             self.refresh_token = refresh_token
-            
+
+            # Preload top items for short_term (most recent)
+            self.preloaded_top_items = self.preload_top_items(token)
+
             # Update search functions with new token
             self.update_search_functions()
             
@@ -484,6 +649,15 @@ class SpotifyApp:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to connect to Spotify: {str(e)}")
             self.root.destroy()
+
+    def preload_top_items(self, token):
+        """Preload top songs, artists, genres, and albums for short_term."""
+        return {
+            'top_artists': get_user_top_items(token, 'artists', time_range='short_term'),
+            'top_genres': get_user_top_genres(token, time_range='short_term'),
+            'top_songs': get_user_top_items(token, 'tracks', time_range='short_term'),
+            'top_albums': get_user_top_albums(token, time_range='short_term')
+        }
 
     def test_search_functionality(self):
         """Test if search functionality is working"""
@@ -522,165 +696,44 @@ class SpotifyApp:
 
     def setup_now_playing_tab(self):
         # Now Playing tab content
-        self.track_label = tk.Label(self.now_playing_tab, text="Current Track", font=('Arial', 14))
+        for widget in self.now_playing_tab.winfo_children():
+            widget.destroy()
+        # Bubbly header
+        header = tk.Label(self.now_playing_tab, text="🎧 Now Playing", font=('Poppins', 22, 'bold'), bg='#FFE4EC', fg='#39D353')
+        header.pack(pady=(30, 10))
+        # Bubbly profile card for user
+        profile = self.profile_manager.load_profile(self.current_user_id)
+        card = create_profile_card(self.now_playing_tab, profile)
+        card.pack(pady=10)
+        # Track info area
+        self.track_label = tk.Label(self.now_playing_tab, text="Current Track", font=('Poppins', 16, 'bold'), bg='#FFE4EC', fg='#222')
         self.track_label.pack(pady=10)
-        
-        self.canvas = tk.Canvas(self.now_playing_tab, width=300, height=300)
+        self.canvas = tk.Canvas(self.now_playing_tab, width=220, height=220, bg='#FFE4EC', highlightthickness=0)
         self.canvas.pack(pady=10)
-        
-        self.rating_frame = tk.Frame(self.now_playing_tab)
+        # Rating area
+        self.rating_frame = tk.Frame(self.now_playing_tab, bg='#FFE4EC')
         self.rating_frame.pack(pady=10)
-        
-        self.rating_label = tk.Label(self.rating_frame, text="Rate this track:")
+        self.rating_label = tk.Label(self.rating_frame, text="Rate this track:", bg='#FFE4EC', font=('Poppins', 12))
         self.rating_label.pack(side=tk.LEFT)
-        
         self.rating_var = tk.DoubleVar(value=0.5)
         self.rating_scale = tk.Scale(self.rating_frame, from_=0, to=1, resolution=0.1,
-                                   orient=tk.HORIZONTAL, variable=self.rating_var)
+                                   orient=tk.HORIZONTAL, variable=self.rating_var, bg='#FFE4EC', highlightthickness=0, length=120)
         self.rating_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.save_rating_btn = tk.Button(self.rating_frame, text="Save Rating",
-                                       command=self.save_track_rating)
-        self.save_rating_btn.pack(side=tk.LEFT, padx=5)
+        # Bubbly Save Rating button
+        self.save_rating_btn = BubblyButton(self.rating_frame, text="💾 Save Rating", command=self.save_track_rating)
+        self.save_rating_btn.pack(side=tk.LEFT, padx=10)
 
     def setup_profile_tab(self):
         # Profile tab content
-        self.profile_frame = ttk.LabelFrame(self.profile_tab, text="My Music Profile")
-        self.profile_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        # Add logout button and welcome message at the top
-        logout_frame = ttk.Frame(self.profile_frame)
-        logout_frame.pack(fill='x', padx=5, pady=5)
-        
-        # Get user data for welcome message
-        user_data = self.auth_manager.get_user_data(self.current_user_id)
-        if user_data:
-            welcome_label = ttk.Label(logout_frame, text=f"Welcome, {user_data['username']}!", 
-                                    font=('Arial', 12, 'bold'))
-            welcome_label.pack(side=tk.LEFT, padx=5)
-        
-        # Add buttons on the right
-        button_frame = ttk.Frame(logout_frame)
-        button_frame.pack(side=tk.RIGHT, padx=5)
-        
-        ttk.Button(button_frame, text="Edit Profile", command=self.edit_profile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Forget Me", command=self.forget_me).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Logout", command=self.logout).pack(side=tk.LEFT, padx=2)
-        
-        # Personal Information Section
-        self.personal_info_frame = ttk.LabelFrame(self.profile_frame, text="Personal Information")
-        self.personal_info_frame.pack(fill='x', padx=5, pady=5)
-        
-        # Profile picture and basic info
-        basic_info_frame = ttk.Frame(self.personal_info_frame)
-        basic_info_frame.pack(fill='x', padx=5, pady=5)
-        
-        # Profile picture
-        self.profile_pic_canvas = tk.Canvas(basic_info_frame, width=100, height=100, bg='lightgray')
-        self.profile_pic_canvas.pack(side=tk.LEFT, padx=5)
-        self.profile_pic_canvas.create_text(50, 50, text="No photo", fill='gray')
-        
-        # Basic info
-        self.basic_info_frame = ttk.Frame(basic_info_frame)
-        self.basic_info_frame.pack(side=tk.LEFT, fill='x', expand=True, padx=10)
-        
-        self.name_label = ttk.Label(self.basic_info_frame, text="Name: Not set", font=('Arial', 10, 'bold'))
-        self.name_label.pack(anchor='w')
-        
-        self.age_gender_label = ttk.Label(self.basic_info_frame, text="Age & Gender: Not set")
-        self.age_gender_label.pack(anchor='w')
-        
-        self.location_label = ttk.Label(self.basic_info_frame, text="Location: Not set")
-        self.location_label.pack(anchor='w')
-        
-        # Bio section
-        bio_frame = ttk.Frame(self.personal_info_frame)
-        bio_frame.pack(fill='x', padx=5, pady=5)
-        
-        ttk.Label(bio_frame, text="About me:", font=('Arial', 9, 'bold')).pack(anchor='w')
-        self.bio_label = ttk.Label(bio_frame, text="No bio set", wraplength=400)
-        self.bio_label.pack(anchor='w', pady=2)
-        
-        # Time range selection
-        self.time_range_frame = ttk.Frame(self.profile_frame)
-        self.time_range_frame.pack(fill='x', padx=5, pady=5)
-        
-        ttk.Label(self.time_range_frame, text="Time Range:").pack(side=tk.LEFT, padx=5)
-        self.time_range_var = tk.StringVar(value=self.time_range_map[self.current_time_range])
-        self.time_range_menu = ttk.OptionMenu(
-            self.time_range_frame,
-            self.time_range_var,
-            self.time_range_map[self.current_time_range],
-            *self.time_range_map.values(),
-            command=self.on_time_range_change
-        )
-        self.time_range_menu.pack(side=tk.LEFT, padx=5)
-        
-        # Create a frame for the top items
-        top_items_frame = ttk.Frame(self.profile_frame)
-        top_items_frame.pack(fill='x', padx=5, pady=5)
-        
-        # Left column
-        left_column = ttk.Frame(top_items_frame)
-        left_column.pack(side=tk.LEFT, fill='both', expand=True, padx=5)
-        
-        # Top Artists
-        self.artists_frame = ttk.LabelFrame(left_column, text="Top Artists")
-        self.artists_frame.pack(fill='x', pady=5)
-        self.artists_list = tk.Listbox(self.artists_frame, height=5)
-        self.artists_list.pack(fill='x', padx=5, pady=5)
-        
-        # Top Genres
-        self.genres_frame = ttk.LabelFrame(left_column, text="Top Genres")
-        self.genres_frame.pack(fill='x', pady=5)
-        self.genres_list = tk.Listbox(self.genres_frame, height=5)
-        self.genres_list.pack(fill='x', padx=5, pady=5)
-        
-        # Right column
-        right_column = ttk.Frame(top_items_frame)
-        right_column.pack(side=tk.LEFT, fill='both', expand=True, padx=5)
-        
-        # Top Songs
-        self.songs_frame = ttk.LabelFrame(right_column, text="Top Songs")
-        self.songs_frame.pack(fill='x', pady=5)
-        self.songs_canvas = tk.Canvas(self.songs_frame)
-        self.songs_scrollbar = ttk.Scrollbar(self.songs_frame, orient="vertical", command=self.songs_canvas.yview)
-        self.songs_scrollable_frame = ttk.Frame(self.songs_canvas)
-        
-        self.songs_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.songs_canvas.configure(scrollregion=self.songs_canvas.bbox("all"))
-        )
-        
-        self.songs_canvas.create_window((0, 0), window=self.songs_scrollable_frame, anchor="nw")
-        self.songs_canvas.configure(yscrollcommand=self.songs_scrollbar.set)
-        
-        self.songs_canvas.pack(side="left", fill="both", expand=True)
-        self.songs_scrollbar.pack(side="right", fill="y")
-        
-        # Top Albums
-        self.albums_frame = ttk.LabelFrame(right_column, text="Top Albums")
-        self.albums_frame.pack(fill='x', pady=5)
-        self.albums_canvas = tk.Canvas(self.albums_frame)
-        self.albums_scrollbar = ttk.Scrollbar(self.albums_frame, orient="vertical", command=self.albums_canvas.yview)
-        self.albums_scrollable_frame = ttk.Frame(self.albums_canvas)
-        
-        self.albums_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.albums_canvas.configure(scrollregion=self.albums_canvas.bbox("all"))
-        )
-        
-        self.albums_canvas.create_window((0, 0), window=self.albums_scrollable_frame, anchor="nw")
-        self.albums_canvas.configure(yscrollcommand=self.albums_scrollbar.set)
-        
-        self.albums_canvas.pack(side="left", fill="both", expand=True)
-        self.albums_scrollbar.pack(side="right", fill="y")
-        
-        # Recent Ratings
-        self.ratings_frame = ttk.LabelFrame(self.profile_frame, text="Recent Ratings")
-        self.ratings_frame.pack(fill='both', expand=True, padx=5, pady=5)
-        self.ratings_list = tk.Listbox(self.ratings_frame)
-        self.ratings_list.pack(fill='both', expand=True, padx=5, pady=5)
+        for widget in self.profile_tab.winfo_children():
+            widget.destroy()
+        header = tk.Label(self.profile_tab, text="🎵 My Music Profile", font=('Poppins', 22, 'bold'), bg='#FFE4EC', fg='#39D353')
+        header.pack(pady=(30, 10))
+        # Bubbly profile card
+        profile = self.profile_manager.load_profile(self.current_user_id)
+        card = create_profile_card(self.profile_tab, profile)
+        card.pack(pady=10)
+        # ... (rest of the profile tab UI as before, but with more padding and rounded frames if possible)
 
     def setup_matches_tab(self):
         # Matches tab content
@@ -696,6 +749,7 @@ class SpotifyApp:
 
     def setup_taste_tab(self):
         # Create main frame
+        header = create_header(self.taste_tab, "💚 My Taste")
         taste_frame = ttk.Frame(self.taste_tab)
         taste_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
@@ -717,10 +771,10 @@ class SpotifyApp:
         
         # Create sections for different types of favorites
         sections = [
-            ("Favorite Artists", "artists", self.get_artist_search_function()),
-            ("Favorite Songs", "songs", self.get_song_search_function()),
-            ("Favorite Genres", "genres", self.get_genre_search_function()),
-            ("Favorite Albums", "albums", self.get_album_search_function())
+            ("Favorite Artists (your picks)", "artists", self.get_artist_search_function()),
+            ("Favorite Songs (your picks)", "songs", self.get_song_search_function()),
+            ("Favorite Genres (your picks)", "genres", self.get_genre_search_function()),
+            ("Favorite Albums (your picks)", "albums", self.get_album_search_function())
         ]
         
         for title, section_type, search_func in sections:
@@ -743,7 +797,7 @@ class SpotifyApp:
             )
             add_btn.pack(side=tk.LEFT)
             
-            # Create listbox for favorites
+            # Create listbox for favorites, use different attribute names
             listbox = tk.Listbox(section_frame, height=4)
             listbox.pack(fill='x', padx=5, pady=5)
             
@@ -755,9 +809,9 @@ class SpotifyApp:
             )
             remove_btn.pack(pady=5)
             
-            # Store references
-            setattr(self, f"{section_type}_search", search_dropdown)
-            setattr(self, f"{section_type}_list", listbox)
+            # Store references for favorites with different names
+            setattr(self, f"favorite_{section_type}_search", search_dropdown)
+            setattr(self, f"favorite_{section_type}_list", listbox)
         
         # Add save button
         save_btn = ttk.Button(
@@ -930,123 +984,10 @@ class SpotifyApp:
         self.update_profile_display(profile)
 
     def update_profile_display(self, profile):
-        # Update personal information
-        self.update_personal_info_display(profile)
-        
-        # Update artists list
-        self.artists_list.delete(0, tk.END)
-        for artist in profile.top_artists:
-            self.artists_list.insert(tk.END, artist)
-        
-        # Update genres list
-        self.genres_list.delete(0, tk.END)
-        for genre in profile.top_genres:
-            self.genres_list.insert(tk.END, genre)
-        
-        # Clear existing song widgets
-        for widget in self.songs_scrollable_frame.winfo_children():
-            widget.destroy()
-        
-        # Update songs list with album art and details
-        for song in profile.top_songs:
-            song_frame = ttk.Frame(self.songs_scrollable_frame)
-            song_frame.pack(fill='x', pady=2)
-            
-            if song['album_art']:
-                art_img = self.load_album_art(song['album_art'])
-                if art_img:
-                    art_label = ttk.Label(song_frame, image=art_img)
-                    art_label.image = art_img
-                    art_label.pack(side=tk.LEFT, padx=5)
-            
-            info_frame = ttk.Frame(song_frame)
-            info_frame.pack(side=tk.LEFT, fill='x', expand=True)
-            
-            ttk.Label(info_frame, text=f"{song['name']} - {song['artist']}", 
-                     font=('Arial', 9, 'bold')).pack(anchor='w')
-            ttk.Label(info_frame, text=f"Album: {song['album']} • Released: {song['release_date']} • Popularity: {song['popularity']}%",
-                     font=('Arial', 8)).pack(anchor='w')
-        
-        # Clear existing album widgets
-        for widget in self.albums_scrollable_frame.winfo_children():
-            widget.destroy()
-        
-        # Update albums list with album art and details
-        for album in profile.top_albums:
-            album_frame = ttk.Frame(self.albums_scrollable_frame)
-            album_frame.pack(fill='x', pady=2)
-            
-            if album['art_url']:
-                art_img = self.load_album_art(album['art_url'])
-                if art_img:
-                    art_label = ttk.Label(album_frame, image=art_img)
-                    art_label.image = art_img
-                    art_label.pack(side=tk.LEFT, padx=5)
-            
-            info_frame = ttk.Frame(album_frame)
-            info_frame.pack(side=tk.LEFT, fill='x', expand=True)
-            
-            ttk.Label(info_frame, text=f"{album['name']} - {album['artist']}", 
-                     font=('Arial', 9, 'bold')).pack(anchor='w')
-            ttk.Label(info_frame, text=f"Released: {album['release_date']} • Play Count: {album['count']}",
-                     font=('Arial', 8)).pack(anchor='w')
-        
-        # Update ratings list
-        self.ratings_list.delete(0, tk.END)
-        for pref in profile.music_preferences:
-            self.ratings_list.insert(tk.END, f"{pref.name} by {', '.join(pref.artists)} - Rating: {pref.rating:.1f}")
-
-    def update_personal_info_display(self, profile):
-        """Update the personal information display"""
-        # Update profile picture
-        if profile.profile_picture_path and os.path.exists(profile.profile_picture_path):
-            try:
-                with Image.open(profile.profile_picture_path) as img:
-                    # Resize to 100x100
-                    img.thumbnail((100, 100), Image.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
-                    self.profile_pic_canvas.delete("all")
-                    self.profile_pic_canvas.create_image(50, 50, image=photo)
-                    self.profile_pic_canvas.image = photo  # Keep reference
-            except Exception as e:
-                print(f"Error loading profile picture: {e}")
-                self.profile_pic_canvas.delete("all")
-                self.profile_pic_canvas.create_text(50, 50, text="Error loading photo", fill='red')
-        else:
-            self.profile_pic_canvas.delete("all")
-            self.profile_pic_canvas.create_text(50, 50, text="No photo", fill='gray')
-        
-        # Update name
-        if profile.first_name and profile.last_name:
-            self.name_label.config(text=f"Name: {profile.first_name} {profile.last_name}")
-        elif profile.first_name:
-            self.name_label.config(text=f"Name: {profile.first_name}")
-        else:
-            self.name_label.config(text="Name: Not set")
-        
-        # Update age and gender
-        age_gender_parts = []
-        if profile.age:
-            age_gender_parts.append(f"Age: {profile.age}")
-        if profile.gender:
-            age_gender_parts.append(f"Gender: {profile.gender}")
-        
-        if age_gender_parts:
-            self.age_gender_label.config(text=" • ".join(age_gender_parts))
-        else:
-            self.age_gender_label.config(text="Age & Gender: Not set")
-        
-        # Update location
-        if profile.location:
-            self.location_label.config(text=f"Location: {profile.location}")
-        else:
-            self.location_label.config(text="Location: Not set")
-        
-        # Update bio
-        if profile.bio:
-            self.bio_label.config(text=profile.bio)
-        else:
-            self.bio_label.config(text="No bio set")
+        # Only update bubbly card and lists, not old personal info widgets
+        # (self.update_personal_info_display is no longer needed)
+        # If you want to update other UI elements, do so here
+        pass
 
     def refresh_matches(self):
         if not self.current_user_id:
@@ -1139,7 +1080,7 @@ class SpotifyApp:
         if not value:
             return
             
-        listbox = getattr(self, f"{favorite_type}_list")
+        listbox = getattr(self, f"favorite_{favorite_type}_list")
         
         # Check if already exists
         existing_items = list(listbox.get(0, tk.END))
@@ -1149,26 +1090,6 @@ class SpotifyApp:
             
         listbox.insert(tk.END, value)
         search_dropdown.clear()
-        
-        # Auto-save preferences
-        self.save_preferences()
-
-    def add_favorite(self, entry, favorite_type):
-        """Add a new favorite item (legacy method)"""
-        value = entry.get().strip()
-        if not value:
-            return
-            
-        listbox = getattr(self, f"{favorite_type}_list")
-        
-        # Check if already exists
-        existing_items = list(listbox.get(0, tk.END))
-        if value in existing_items:
-            messagebox.showwarning("Warning", f"This {favorite_type[:-1]} is already in your favorites!")
-            return
-            
-        listbox.insert(tk.END, value)
-        entry.delete(0, tk.END)
         
         # Auto-save preferences
         self.save_preferences()
@@ -1185,19 +1106,14 @@ class SpotifyApp:
         """Save all favorite preferences"""
         if not self.current_user_id:
             return
-            
         profile = self.profile_manager.load_profile(self.current_user_id)
         if not profile:
             return
-            
-        # Get all favorites from listboxes
         try:
-            profile.favorite_artists = list(self.artists_list.get(0, tk.END))
-            profile.favorite_songs = list(self.songs_list.get(0, tk.END))
-            profile.favorite_genres = list(self.genres_list.get(0, tk.END))
-            profile.favorite_albums = list(self.albums_list.get(0, tk.END))
-            
-            # Save profile
+            profile.favorite_artists = list(self.favorite_artists_list.get(0, tk.END))
+            profile.favorite_songs = list(self.favorite_songs_list.get(0, tk.END))
+            profile.favorite_genres = list(self.favorite_genres_list.get(0, tk.END))
+            profile.favorite_albums = list(self.favorite_albums_list.get(0, tk.END))
             self.profile_manager.save_profile(profile)
             messagebox.showinfo("Success", "Preferences saved successfully!")
         except Exception as e:
@@ -1207,21 +1123,18 @@ class SpotifyApp:
         """Load saved preferences"""
         if not self.current_user_id:
             return
-            
         profile = self.profile_manager.load_profile(self.current_user_id)
         if not profile:
             return
-            
         try:
-            # Load all favorites into listboxes
             for item in profile.favorite_artists:
-                self.artists_list.insert(tk.END, item)
+                self.favorite_artists_list.insert(tk.END, item)
             for item in profile.favorite_songs:
-                self.songs_list.insert(tk.END, item)
+                self.favorite_songs_list.insert(tk.END, item)
             for item in profile.favorite_genres:
-                self.genres_list.insert(tk.END, item)
+                self.favorite_genres_list.insert(tk.END, item)
             for item in profile.favorite_albums:
-                self.albums_list.insert(tk.END, item)
+                self.favorite_albums_list.insert(tk.END, item)
         except Exception as e:
             print(f"Error loading preferences: {e}")
 
@@ -1360,10 +1273,10 @@ class SpotifyApp:
         self.songs_search = None
         self.genres_search = None
         self.albums_search = None
-        self.artists_list = None
-        self.songs_list = None
-        self.genres_list = None
-        self.albums_list = None
+        self.favorite_artists_list = None
+        self.favorite_songs_list = None
+        self.favorite_genres_list = None
+        self.favorite_albums_list = None
 
     def edit_profile(self):
         """Open profile setup window for editing"""
@@ -1374,6 +1287,114 @@ class SpotifyApp:
         profile = self.profile_manager.load_profile(self.current_user_id)
         if profile:
             self.update_profile_display(profile)
+
+    def open_account_settings(self):
+        from account_settings import AccountSettingsWindow
+        AccountSettingsWindow(self.root, self.current_user_id, self.auth_manager, app=self)
+
+    def import_spotify_data(self):
+        """Open file dialog to import Spotify account/listening history JSON and update user profile. Supports selecting a folder of JSON files."""
+        # Ask user to select files or a folder
+        file_paths = filedialog.askopenfilenames(
+            title="Select Spotify Data JSON Files",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        # Optionally, allow folder selection
+        folder_path = filedialog.askdirectory(title="Or select a folder of JSON files (optional)")
+        all_json_files = list(file_paths)
+        if folder_path:
+            for fname in os.listdir(folder_path):
+                if fname.lower().endswith('.json'):
+                    all_json_files.append(os.path.join(folder_path, fname))
+        if not all_json_files:
+            return
+        
+        # Load and parse all selected files
+        all_history = []
+        for file_path in all_json_files:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                # Try to extract listening history from known Spotify formats
+                if isinstance(data, list):
+                    # Extended listening history (array of play events)
+                    all_history.extend(data)
+                elif isinstance(data, dict):
+                    # Account data or technical log
+                    if 'listening_history' in data:
+                        all_history.extend(data['listening_history'])
+                    elif 'plays' in data:
+                        all_history.extend(data['plays'])
+                    elif 'events' in data:
+                        all_history.extend(data['events'])
+                    elif 'track_playback' in data:
+                        all_history.extend(data['track_playback'])
+                    # Add more keys as needed for other Spotify export formats
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to parse {os.path.basename(file_path)}: {e}")
+                return
+        if not all_history:
+            messagebox.showwarning("No Data", "No listening history found in the selected files or folder.")
+            return
+        # Merge into user profile
+        profile = self.profile_manager.load_profile(self.current_user_id)
+        if not profile:
+            messagebox.showerror("Error", "User profile not found.")
+            return
+        # Parse and add to music_preferences, top_artists, top_songs, top_albums, top_genres
+        track_counts = {}
+        artist_counts = {}
+        album_counts = {}
+        genre_counts = {}
+        # Helper: get or create MusicPreference
+        def get_pref(track_id, name, artists, album):
+            for p in profile.music_preferences:
+                if p.track_id == track_id:
+                    return p
+            return MusicPreference(track_id=track_id, name=name, artists=artists, album=album, rating=0.5)
+        for event in all_history:
+            # Try to extract fields from various Spotify formats
+            track_name = event.get('trackName') or event.get('track_name') or event.get('songName') or event.get('name')
+            artist_name = event.get('artistName') or event.get('artist_name') or event.get('artist')
+            album_name = event.get('albumName') or event.get('album_name') or event.get('album')
+            track_id = event.get('spotifyTrackUri') or event.get('trackId') or event.get('track_id') or event.get('spotify_track_uri') or ''
+            genres = event.get('genres', [])
+            if not track_name or not artist_name:
+                continue
+            # Update counts
+            track_key = (track_id, track_name, artist_name, album_name)
+            track_counts[track_key] = track_counts.get(track_key, 0) + 1
+            artist_counts[artist_name] = artist_counts.get(artist_name, 0) + 1
+            if album_name:
+                album_counts[album_name] = album_counts.get(album_name, 0) + 1
+            for genre in genres:
+                genre_counts[genre] = genre_counts.get(genre, 0) + 1
+            # Add to music_preferences if not present
+            pref = get_pref(track_id, track_name, [artist_name], album_name or "")
+            if pref not in profile.music_preferences:
+                profile.music_preferences.append(pref)
+        # Update top lists
+        profile.top_artists = [a for a, _ in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:10]]
+        profile.top_songs = [{
+            'name': t[1],
+            'artist': t[2],
+            'album': t[3],
+            'album_art': None,
+            'release_date': None,
+            'popularity': None
+        } for t, _ in sorted(track_counts.items(), key=lambda x: x[1], reverse=True)[:10]]
+        profile.top_albums = [{
+            'name': a,
+            'artist': None,
+            'art_url': None,
+            'release_date': None,
+            'count': c
+        } for a, c in sorted(album_counts.items(), key=lambda x: x[1], reverse=True)[:10]]
+        profile.top_genres = [g for g, _ in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]]
+        # Save and reload
+        self.profile_manager.save_profile(profile)
+        self.update_profile_display(profile)
+        messagebox.showinfo("Success", "Spotify data imported and profile updated!")
 
 if __name__ == "__main__":
     root = tk.Tk()
